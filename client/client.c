@@ -86,9 +86,11 @@ int main(int argc, char *argv[])
 
     freeaddrinfo(servinfo); // all done with this structure
 
+    int i;
+
     unsigned char op = 0;
     unsigned char proto = (unsigned char)(atoi(argv[6]) & 0xff);
-    unsigned int trans_id = 0xffffffff;
+    unsigned int trans_id = 0x0000ff00;
     unsigned short checksum;
     unsigned int opproto = (op << 8) + proto;
     printf("op and proto = %hu\n", (unsigned short)opproto);
@@ -104,14 +106,13 @@ int main(int argc, char *argv[])
 	sum += 1;
     checksum = ~((unsigned short)sum);
     printf("checksum = %hu\n", checksum);
-    //printf("sum+checksum = %hu\n", sum + checksum);
     
     int32_t firstline = htonl((opproto << 16) + checksum);
     int32_t secondline = htonl(trans_id);
-    int buffer[8];
+    int buffer[2];
     buffer[0] = firstline;
-    buffer[4] = secondline;
-    
+    buffer[1] = secondline;
+
     if (send(sockfd, buffer, 8, 0) == -1)
 	perror("send");
 
@@ -123,7 +124,6 @@ int main(int argc, char *argv[])
     buf[numbytes] = '\0';
 
     printf("client: received '%s'\n",buf);
-    int i;
     for (i = 0; i < 8; i++)
     {
 	printf("%hu\n", ntohs((unsigned short)buf[i]) >> 8);
