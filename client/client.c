@@ -33,7 +33,7 @@ void *get_in_addr(struct sockaddr *sa)
 int main(int argc, char *argv[])
 {
     int sockfd, numbytes;  
-    char buf[MAXDATASIZE];
+    unsigned char buf[MAXDATASIZE];
     struct addrinfo hints, *servinfo, *p;
     int rv;
     char s[INET6_ADDRSTRLEN];
@@ -80,8 +80,7 @@ int main(int argc, char *argv[])
     }
 //now p is the addrinfo of the server
 //inet_ntop, print the server name
-    inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
-            s, sizeof s);
+    inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof s);
     printf("client: connecting to %s\n", s);
 
     freeaddrinfo(servinfo); // all done with this structure
@@ -90,7 +89,7 @@ int main(int argc, char *argv[])
 
     unsigned char op = 0;
     unsigned char proto = (unsigned char)(atoi(argv[6]) & 0xff);
-    unsigned int trans_id = 0x0000ff00;
+    unsigned int trans_id = 0x00010000;
     unsigned short checksum;
     unsigned int opproto = (op << 8) + proto;
     printf("op and proto = %hu\n", (unsigned short)opproto);
@@ -113,10 +112,10 @@ int main(int argc, char *argv[])
     buffer[0] = firstline;
     buffer[1] = secondline;
 
-    if (send(sockfd, buffer, 8, 0) == -1)
+    if (write(sockfd, buffer, 8) == -1)
 	perror("send");
 
-    if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
+    if ((numbytes = read(sockfd, buf, MAXDATASIZE-1)) == -1) {
         perror("recv");
         exit(1);
     }
@@ -126,10 +125,72 @@ int main(int argc, char *argv[])
     printf("client: received '%s'\n",buf);
     for (i = 0; i < 8; i++)
     {
-	printf("%hu\n", ntohs((unsigned short)buf[i]) >> 8);
+		printf("%02X,", buf[i]);
     }
-    close(sockfd);
+    printf("\n");
 
+    int protocol = buf[1];
+    printf("protocol = %d\n", protocol);
+    if (protocol != 1 && protocol != 2)
+    {
+    	perror("protocol error");
+    }
+
+    unsigned char teststring[100];
+    scanf("%s", teststring);
+    printf("teststring = %s, length = %d\n", teststring, (int)strlen(teststring));
+    int length = (int)strlen(teststring);
+    unsigned char message[100];
+    if (protocol == 1)
+    {
+		strcpy(message, teststring);
+        message[length] = '\\';
+        message[length + 1] = '0';
+    }
+    if (protocol == 2)
+    {
+    	void *p;
+    	p = message;
+    	*(int*)p = htonl(length);
+        strcpy(message + 4, teststring);
+        for (i = 0; i < length + 4; i++)
+        {
+        	printf("%02X ", message[i]);  
+        }
+        printf("\n");
+        
+    }
+
+//write string
+    if (write(sockfd, message, 20) == -1)
+		perror("write");
+
+//read response
+    int readbytes;
+    unsigned char readbuffer[100];
+    if ((readbytes = read(sockfd, readbuffer, 100-1)) == -1)
+        perror("read");
+    
+    printf("read bytes: ");
+	for (i = 0; i < readbytes; i++)
+    {
+        printf("%02X ", readbuffer[i]);
+    }
+    printf("\n");
+    
+    if (protocol == 1)
+    {
+    	readbuffer[readbytes-2] = '\0';
+        printf("result: %s\n", readbuffer);
+    }
+    else if (protocol == 2)
+    {
+    	readbuffer[readbytes] = '\0';
+    	printf("result: %s\n", readbuffer+4);
+    }
+    printf("\n");
+
+    close(sockfd);
     return 0;
 }
 
