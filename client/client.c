@@ -14,8 +14,6 @@
 
 #include <arpa/inet.h>
 
-//#define PORT "3490" // the port client will be connecting to 
-
 #define MAXDATASIZE 100 // max number of bytes we can get at once 
 
 // get sockaddr, IPv4 or IPv6:
@@ -28,8 +26,6 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-// ./client -h 000.000.000.000 -p 1234 -m 1
-// host, port, protocol number
 int main(int argc, char *argv[])
 {
     int sockfd, numbytes;  
@@ -44,13 +40,12 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-
 //initialize hints
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
-//get addrinfo of target address and port and hint info and put that into servinfo pointer, which is a linked list.
+//get addrinfo of target address and port and hint info and put that into servinfo pointer, which is a linked list of addrinfo
     if ((rv = getaddrinfo(argv[2], argv[4], &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return 1;
@@ -136,57 +131,94 @@ int main(int argc, char *argv[])
     	perror("protocol error");
     }
 
-    unsigned char teststring[100];
-    scanf("%s", teststring);
-    printf("teststring = %s, length = %d\n", teststring, (int)strlen(teststring));
-    int length = (int)strlen(teststring);
-    unsigned char message[100];
+	unsigned char wbuf[100] = "";
+	unsigned char ch;
+	unsigned char* cp;
+	int length = 0;
+
     if (protocol == 1)
     {
-		strcpy(message, teststring);
-        message[length] = '\\';
-        message[length + 1] = '0';
+    	cp = wbuf;
+    	while (read(STDIN_FILENO, &ch, 1) > 0)
+		{
+			*cp = ch;
+			cp++;
+			length++;
+		}
+        wbuf[length] = '\\';
+        wbuf[length + 1] = '0';
+        
+        printf("bytes sent, length = %d :\n", length + 2);
+        for (i = 0; i < length + 2; i++)
+		{
+			printf("%02x ", wbuf[i]);
+		}	
+		printf("\n");
     }
     if (protocol == 2)
     {
+    	cp = wbuf + 4;
+    	while (read(STDIN_FILENO, &ch, 1) > 0)
+		{
+			*cp = ch;
+			cp++;
+			length++;
+		}
     	void *p;
-    	p = message;
+    	p = wbuf;
     	*(int*)p = htonl(length);
-        strcpy(message + 4, teststring);
+
+        printf("bytes sent, length = %d :\n", length + 4);
         for (i = 0; i < length + 4; i++)
-        {
-        	printf("%02X ", message[i]);  
-        }
-        printf("\n");
-        
+		{
+			printf("%02x ", wbuf[i]);
+		}	
+		printf("\n");
     }
+    
+
 
 //write string
-    if (write(sockfd, message, 20) == -1)
+    if (write(sockfd, wbuf, 100) == -1)
 		perror("write");
 
 //read response
     int readbytes;
-    unsigned char readbuffer[100];
-    if ((readbytes = read(sockfd, readbuffer, 100-1)) == -1)
+    unsigned char rbuf[100];
+    if ((readbytes = read(sockfd, rbuf, 100)) == -1)
         perror("read");
     
-    printf("read bytes: ");
+    printf("bytes received, length = %d: \n", readbytes);
 	for (i = 0; i < readbytes; i++)
     {
-        printf("%02X ", readbuffer[i]);
+        printf("%02x ", rbuf[i]);
     }
     printf("\n");
     
+    
+    
     if (protocol == 1)
     {
-    	readbuffer[readbytes-2] = '\0';
-        printf("result: %s\n", readbuffer);
+        printf("result string, length = %d: \n", readbytes - 2);
+        for (i = 0; i<readbytes-2; i++)
+    	{
+    		printf("%02X ", rbuf[i]);
+    	}
+    	printf("\n");
     }
     else if (protocol == 2)
     {
-    	readbuffer[readbytes] = '\0';
-    	printf("result: %s\n", readbuffer+4);
+    	int msglength;
+    	void *vp;
+    	vp = rbuf;
+    	msglength = ntohl(*(int*)vp);
+    	printf("msglength = %d\n", msglength);
+    	printf("result string, length = %d: \n", msglength);
+    	for (i = 4; i<msglength + 4; i++)
+    	{
+    		printf("%02x ", rbuf[i]);
+    	}
+    	printf("\n");
     }
     printf("\n");
 
