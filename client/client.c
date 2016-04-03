@@ -15,6 +15,7 @@
 #include <arpa/inet.h>
 
 #define MAXDATASIZE 100 // max number of bytes we can get at once 
+#define BUFSIZE 1024
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -36,7 +37,7 @@ int main(int argc, char *argv[])
 
     if (argc != 7 || strcmp(argv[1], "-h") != 0 || strcmp(argv[3], "-p") != 0 || strcmp(argv[5], "-m") != 0)
     {
-	fprintf(stderr,"usage: client -h hostip -p port -m protocol\n");
+		fprintf(stderr,"usage: client -h hostip -p port -m protocol\n");
         exit(1);
     }
 
@@ -73,154 +74,237 @@ int main(int argc, char *argv[])
         fprintf(stderr, "client: failed to connect\n");
         return 2;
     }
-//now p is the addrinfo of the server
+//now p is the addrinfo of the serverf
 //inet_ntop, print the server name
     inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof s);
-    printf("client: connecting to %s\n", s);
+    fprintf(stderr, "connecting to %s\n", s);
 
     freeaddrinfo(servinfo); // all done with this structure
 
     int i;
+    void *vp;
 
     unsigned char op = 0;
     unsigned char proto = (unsigned char)(atoi(argv[6]) & 0xff);
     unsigned int trans_id = 0x00010000;
     unsigned short checksum;
-    unsigned int opproto = (op << 8) + proto;
-    printf("op and proto = %hu\n", (unsigned short)opproto);
+    unsigned short opproto = (op << 8) + proto;
     unsigned int id1 = (trans_id >> 16) & 0xffff;
-    printf("transid1 = %hu\n", (unsigned short)id1);
     unsigned int id2 = trans_id & 0xffff;
-    printf("transid2 = %hu\n", (unsigned short)id2);
     unsigned int opprotoid1 = opproto + id1;
     if (opprotoid1 >> 16)
-	opprotoid1 += 1;
+		opprotoid1 += 1;
     unsigned int sum = opprotoid1 + id2;
     if (sum >> 16)
-	sum += 1;
+		sum += 1;
     checksum = ~((unsigned short)sum);
-    printf("checksum = %hu\n", checksum);
     
-    int32_t firstline = htonl((opproto << 16) + checksum);
-    int32_t secondline = htonl(trans_id);
-    int buffer[2];
-    buffer[0] = firstline;
-    buffer[1] = secondline;
-
-    if (write(sockfd, buffer, 8) == -1)
-	perror("send");
-
-    if ((numbytes = read(sockfd, buf, MAXDATASIZE-1)) == -1) {
-        perror("recv");
-        exit(1);
-    }
-
-    buf[numbytes] = '\0';
-
-    printf("client: received '%s'\n",buf);
+    unsigned int firstline = htonl((opproto << 16) + checksum);
+    unsigned int secondline = htonl(trans_id);
+    unsigned int wbuf1[2];
+    wbuf1[0] = firstline;
+    wbuf1[1] = secondline;
+    
+    //check phase 1 request
+    vp = wbuf1;
     for (i = 0; i < 8; i++)
     {
-		printf("%02X,", buf[i]);
+    	fprintf(stderr, "%02x ", *(unsigned char*)vp);
+    	vp++;
     }
-    printf("\n");
+    fprintf(stderr, "\n");
+
+	//write phase 1
+    if (write(sockfd, wbuf1, 8) == -1)
+		perror("write");
+		
+	//read phase 1
+    if ((numbytes = read(sockfd, buf, 8)) == -1) {
+        perror("read");
+        exit(1);
+    }
+    
+    //check phase 1 response
+    for (i = 0; i < 8; i++)
+    {
+		fprintf(stderr, "%02x ", buf[i]);
+    }
+    fprintf(stderr, "\n");
 
     int protocol = buf[1];
-    printf("protocol = %d\n", protocol);
     if (protocol != 1 && protocol != 2)
     {
     	perror("protocol error");
+    	exit(1);
     }
 
-	unsigned char wbuf[100] = "";
+
+		//write phase 2
+
+	unsigned char wbuf[BUFSIZE];
 	unsigned char ch;
 	unsigned char* cp;
-	int length = 0;
 
     if (protocol == 1)
-    {
-    	cp = wbuf;
-    	while (read(STDIN_FILENO, &ch, 1) > 0)
+    {	
+		cp = wbuf;
+		int length = 0;
+    	int flag = 0;
+    	int bytes = 0;
+    	while (1)
 		{
-			*cp = ch;
-			cp++;
-			length++;
+			if (flag)
+			{
+				*cp = '\\';
+				cp ++;
+				length++;
+				flag = 0;
+			}
+			else
+			{			
+				int readchar;
+				if ((readchar = read(STDIN_FILENO, &ch, 1)) == -1)
+					perror("read");
+				if (readchar == 0)
+				{
+					break;
+				}
+				*cp = ch;
+				cp++;
+				length++;
+				if (ch == '\\')
+				{
+					flag = 1;
+				}
+			}
+			if (cp == wbuf + BUFSIZE)
+			{
+				if (write(sockfd, wbuf, BUFSIZE) == -1)
+					perror("write");
+				cp = wbuf;
+				bytes += BUFSIZE;
+				fprintf(stderr, "sent total %d bytes\n", bytes);
+			}
 		}
-        wbuf[length] = '\\';
-        wbuf[length + 1] = '0';
-        
-        printf("bytes sent, length = %d :\n", length + 2);
-        for (i = 0; i < length + 2; i++)
-		{
-			printf("%02x ", wbuf[i]);
-		}	
-		printf("\n");
+		if (write(sockfd, wbuf, length % BUFSIZE) == -1)
+			perror("write");
+		bytes += (cp - wbuf);
+		fprintf(stderr, "sent total %d bytes\n", bytes);
+		
+        wbuf[0] = '\\';
+        wbuf[1] = '0';
+		if (write(sockfd, wbuf, 2) == -1)
+			perror("write");
+		bytes += 2;
+		fprintf(stderr, "sent total %d bytes\n", bytes);
     }
     if (protocol == 2)
     {
-    	cp = wbuf + 4;
-    	while (read(STDIN_FILENO, &ch, 1) > 0)
-		{
-			*cp = ch;
-			cp++;
-			length++;
-		}
+    	FILE *fp;
+    	int length;
+    	fp = fopen("temp", "w+");
+    	while((length = fread(wbuf, 1, 1024, stdin)) > 0)
+    	{
+    		fwrite(wbuf, 1, length, fp);
+    	}
+    	
+    	int filesize;
+    	fseek(fp, 0, SEEK_END);
+    	filesize = ftell(fp);
+    	fseek(fp, 0, SEEK_SET);
+    	
     	void *p;
     	p = wbuf;
-    	*(int*)p = htonl(length);
-
-        printf("bytes sent, length = %d :\n", length + 4);
-        for (i = 0; i < length + 4; i++)
-		{
-			printf("%02x ", wbuf[i]);
-		}	
-		printf("\n");
+    	*(int*)p = htonl(filesize);
+    	if (write(sockfd, wbuf, 4) == -1)
+    			perror("write");
+    	int read_len;
+    	while (read_len < filesize)
+    	{
+    		int read_add = (filesize - read_len) > BUFSIZE ? BUFSIZE : (filesize - read_len);
+    		read_len += fread(wbuf, 1, read_add, fp);
+    		if (write(sockfd, wbuf, read_add) == -1)
+    			perror("write");
+    	}
+    	fclose(fp);    	
     }
+    fprintf(stderr, "sent message\n");
     
 
-
-//write string
-    if (write(sockfd, wbuf, 100) == -1)
-		perror("write");
-
-//read response
-    int readbytes;
-    unsigned char rbuf[100];
-    if ((readbytes = read(sockfd, rbuf, 100)) == -1)
-        perror("read");
+	//read phase 2
     
-    printf("bytes received, length = %d: \n", readbytes);
-	for (i = 0; i < readbytes; i++)
-    {
-        printf("%02x ", rbuf[i]);
-    }
-    printf("\n");
-    
-    
+    unsigned char rbuf[BUFSIZE];
     
     if (protocol == 1)
     {
-        printf("result string, length = %d: \n", readbytes - 2);
-        for (i = 0; i<readbytes-2; i++)
-    	{
-    		printf("%02X ", rbuf[i]);
-    	}
-    	printf("\n");
-    }
-    else if (protocol == 2)
-    {
-    	int msglength;
+		cp = rbuf;
+		int readbytes = 0;
+		int flag = 0;
+		int terminate = 0;
+		while (!terminate)
+		{
+			if ((readbytes = read(sockfd, &rbuf, BUFSIZE)) == -1)
+			{
+				perror("read");
+			}
+			if (readbytes == 0)
+			{
+				fprintf(stderr, "readbytes == 0\n");
+				break;
+			}
+			for (cp = rbuf; cp < rbuf + BUFSIZE; cp++)
+			{
+				ch = *cp;
+				if (flag)
+				{
+					if (ch == '0')
+					{
+						terminate = 1;
+						break;
+					}
+					else if (ch == '\\')
+					{
+						write(STDOUT_FILENO, &ch, 1);
+						flag = 0;
+						continue;
+					}
+		   		}
+				else if (ch == '\\')
+				{
+					flag = 1;
+					continue;
+				}
+				else
+				{
+					write(STDOUT_FILENO, &ch, 1);
+					flag = 0;
+				}
+			}
+			if (terminate)
+				break;
+		}
+	}
+	
+	else if (protocol == 2)
+	{
+		int recv_len = 0;
+		while(recv_len < 4)
+		{
+			recv_len += read(sockfd, rbuf+recv_len, 4-recv_len);
+		}
+		int msglength;
     	void *vp;
     	vp = rbuf;
     	msglength = ntohl(*(int*)vp);
-    	printf("msglength = %d\n", msglength);
-    	printf("result string, length = %d: \n", msglength);
-    	for (i = 4; i<msglength + 4; i++)
+    	recv_len = 0;
+    	while(recv_len < msglength)
     	{
-    		printf("%02x ", rbuf[i]);
+    		int recv_add = (msglength - recv_len) > BUFSIZE ? BUFSIZE : (msglength - recv_len);
+    		recv_len += read(sockfd, rbuf, recv_add);
+    		write(STDOUT_FILENO, rbuf, recv_add);
     	}
-    	printf("\n");
-    }
-    printf("\n");
+    	
+	}
 
     close(sockfd);
     return 0;
