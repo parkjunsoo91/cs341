@@ -16,7 +16,8 @@
 
 #define MAXDATASIZE 100 // max number of bytes we can get at once 
 #define BUFSIZE 1024
-#define MEMBUFSIZE 1000000
+#define MEMBUFSIZE 500000 //use this for normal server
+//#define MEMBUFSIZE 10000// use this for challenging server
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -171,6 +172,10 @@ int main(int argc, char *argv[])
 			{
 				if ((read_len = read(STDIN_FILENO, &ch, 1)) == -1)
 					perror("read");
+				if (read_len != 1)
+				{
+					fprintf(stderr, "read has returned 0 length!\n");
+				}
 				if (read_len == 0)
 				{
 					break;
@@ -186,8 +191,11 @@ int main(int argc, char *argv[])
 			//if buffer is full, send and start to rewrite on buffer
 			if (cp == wbuf + MEMBUFSIZE)
 			{
-				if (write(sockfd, wbuf, MEMBUFSIZE) == -1)
+				fprintf(stderr, "just before write...\n");
+				int write_len;
+				if ((write_len = write(sockfd, wbuf, MEMBUFSIZE)) == -1)
 					perror("write");
+				fprintf(stderr, "write_len = %d\n", write_len);
 				cp = wbuf;
 				sent_len += MEMBUFSIZE;
 				fprintf(stderr, "sent %d bytes of message\n", sent_len);
