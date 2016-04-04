@@ -120,9 +120,13 @@ int main(int argc, char *argv[])
 		perror("write");
 	
 	//read phase 1
-	if ((numbytes = read(sockfd, buf, 8)) == -1) {
-		perror("read");
-		exit(1);
+	int sum_len = 0;
+	int read_len;
+	while(sum_len < 8)
+	{
+		if ((read_len = read(sockfd, buf+sum_len, 8-sum_len)) == -1)
+			perror("read");
+		sum_len += read_len;
 	}
 
 	//check phase 1 response
@@ -168,7 +172,9 @@ int main(int argc, char *argv[])
 				if ((read_len = read(STDIN_FILENO, &ch, 1)) == -1)
 					perror("read");
 				if (read_len == 0)
+				{
 					break;
+				}
 				*cp = ch;
 				cp++;
 				length++;
@@ -184,6 +190,7 @@ int main(int argc, char *argv[])
 					perror("write");
 				cp = wbuf;
 				sent_len += MEMBUFSIZE;
+				fprintf(stderr, "sent %d bytes of message\n", sent_len);
 			}
 		}
 		//send remaining buffer content
@@ -244,14 +251,15 @@ int main(int argc, char *argv[])
 		int read_len = 0;
 		int flag_esc = 0;
 		int flag_terminate = 0;
+		int sum_len = 0;
 		while (!flag_terminate)
 		{
 			//read from socket to buffer
 			if ((read_len = read(sockfd, &rbuf, BUFSIZE)) == -1)
 				perror("read");
-			
+			sum_len += read_len;
 			//write each chararacter from buffer to stdout
-			for (cp = rbuf; cp < rbuf + BUFSIZE; cp++)
+			for (cp = rbuf; cp < rbuf + read_len; cp++)
 			{
 				ch = *cp;
 				if (flag_esc)
@@ -280,6 +288,7 @@ int main(int argc, char *argv[])
 				}
 			}
 		}
+		fprintf(stderr, "received total %d bytes\n", sum_len);
 	}
 
 	else if (protocol == 2)
@@ -287,12 +296,12 @@ int main(int argc, char *argv[])
 		int read_len;
 		
 		//get length field
-		int recv_len = 0;
-		while(recv_len < 4)
+		int sum_len = 0;
+		while(sum_len < 4)
 		{
-			if ((read_len = read(sockfd, rbuf+recv_len, 4-recv_len)) == -1)
+			if ((read_len = read(sockfd, rbuf+sum_len, 4-sum_len)) == -1)
 				perror("read");
-			recv_len += read_len;
+			sum_len += read_len;
 		}
 
 		int msg_len;
@@ -303,16 +312,16 @@ int main(int argc, char *argv[])
 		
 		//get string field
 		int chunk_len;
-		recv_len = 0;
-		while(recv_len < msg_len)
+		sum_len = 0;
+		while(sum_len < msg_len)
 		{
-			chunk_len = (msg_len - recv_len) > BUFSIZE ? BUFSIZE : (msg_len - recv_len);
+			chunk_len = (msg_len - sum_len) > BUFSIZE ? BUFSIZE : (msg_len - sum_len);
 			if ((read_len = read(sockfd, rbuf, chunk_len)) == -1)
 				perror("read");	
-			recv_len += read_len;
+			sum_len += read_len;
 			write(STDOUT_FILENO, rbuf, read_len);		
 		}
-		fprintf(stderr, "received %d out of %d bytes\n", recv_len, msg_len);
+		fprintf(stderr, "received %d out of %d bytes\n", sum_len, msg_len);
 	
 	}
 
