@@ -200,47 +200,62 @@ int main(int argc, char *argv[])
                         break;
                     }
                 }
+                printf("pass point1\n");
                 if(proto == 1)
                 {
+                    printf("pass point2\n");
+                    // char prev;
+                    // int init = 1;
+                    int init = 1;
+                    char buf2[MAXDATASIZE];
                     char prev;
                     while(1)
                     {
-                        if(read(new_fd, buf, MAXDATASIZE-1) != -1)
+                        if(read(new_fd, buf, 1) != -1)
                         {
-                            int j = 0;
-                            bool flag = true;
-                            //TODO: check invalid datas
-                            //      (ex. op != 0, proto != 0 | 1 | 2, checksum failed)
-                            printf("get string %d\n", j++);
-                            while(flag){
-                                if (buf[j] == prev)
+                            printf("%c\n", buf[0]);
+                            if(init == 1)
+                            {
+                                printf("init\n");
+                                prev = buf[0];
+                                if(write(new_fd, buf, 1) == -1) perror("send");
+                                init = 0;
+                            }
+                            else
+                            {
+                                if(buf[0]=='\\')
                                 {
-                                    if(prev == '\\')
+                                    printf("1\n");
+                                    read(new_fd, buf+1, 1);
+                                    if(buf[1] == '\\')
                                     {
-                                        if(buf[j+1] == '0');
+                                        if(prev!='\\')
                                         {
-                                            //just pass
+                                            prev = '\\';
+                                            if(write(new_fd, buf, 2) == -1) perror("send");
                                         }
-                                        else
-                                        {
-                                            //remove
-                                        }
+                                    }
+                                    else if(buf[1]=='0')
+                                    {
+                                        printf("terminate\n");
+                                        if(write(new_fd, buf, 2) == -1) perror("send");
+                                        break;
                                     }
                                     else
                                     {
-                                        //remove
+                                        break;
+
                                     }
                                 }
                                 else
                                 {
-                                    if(buf[j]=='0')
+                                    printf("2\n");
+                                    if(buf[0] != prev)
                                     {
-                                        if(j != 0 && buf[j-1] == '\\')
-                                        {
-                                            //finish
-                                        }
+                                        printf("2-not remove\n");
+                                        if(write(new_fd, buf, 1) == -1) perror("send");
+                                        prev = buf[0];
                                     }
-                                    //change prev
                                 }
                             }
                         }
