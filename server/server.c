@@ -21,6 +21,8 @@
 
 #define MAXDATASIZE 100 // max number of bytes we can get at once 
 
+#define MAXBUFFERSIZE 10485760 //10M
+
 void sigchld_handler(int s)
 {
     // waitpid() might overwrite errno, so we save and restore it:
@@ -132,7 +134,7 @@ int main(int argc, char *argv[])
     unsigned int sum;
     unsigned char buf[MAXDATASIZE];
     int buffer[2];
-    int i;
+    unsigned int i;
 
     while(1) {  // main accept() loop
         sin_size = sizeof their_addr;
@@ -200,12 +202,9 @@ int main(int argc, char *argv[])
                         break;
                     }
                 }
-                printf("pass point1\n");
+
                 if(proto == 1)
                 {
-                    printf("pass point2\n");
-                    // char prev;
-                    // int init = 1;
                     int init = 1;
                     char buf2[MAXDATASIZE];
                     char prev;
@@ -213,10 +212,8 @@ int main(int argc, char *argv[])
                     {
                         if(read(new_fd, buf, 1) != -1)
                         {
-                            printf("%c\n", buf[0]);
                             if(init == 1)
                             {
-                                printf("init\n");
                                 prev = buf[0];
                                 if(write(new_fd, buf, 1) == -1) perror("send");
                                 init = 0;
@@ -225,7 +222,6 @@ int main(int argc, char *argv[])
                             {
                                 if(buf[0]=='\\')
                                 {
-                                    printf("1\n");
                                     read(new_fd, buf+1, 1);
                                     if(buf[1] == '\\')
                                     {
@@ -237,7 +233,6 @@ int main(int argc, char *argv[])
                                     }
                                     else if(buf[1]=='0')
                                     {
-                                        printf("terminate\n");
                                         if(write(new_fd, buf, 2) == -1) perror("send");
                                         break;
                                     }
@@ -249,10 +244,8 @@ int main(int argc, char *argv[])
                                 }
                                 else
                                 {
-                                    printf("2\n");
                                     if(buf[0] != prev)
                                     {
-                                        printf("2-not remove\n");
                                         if(write(new_fd, buf, 1) == -1) perror("send");
                                         prev = buf[0];
                                     }
@@ -260,6 +253,76 @@ int main(int argc, char *argv[])
                             }
                         }
                     }
+                }
+                else
+                {
+                    int init = 1;
+                    char lengthBuffer[4];
+                    //char *buf2 = (char *)malloc(MAXBUFFERSIZE);
+                    //char *buf3 = (char *)malloc(MAXBUFFERSIZE);
+                    char *buf2;
+                    char *buf3;
+                    if((buf2 = (char *)malloc(MAXBUFFERSIZE)) == NULL) printf("failed 1\n");
+                    if((buf3 = (char *)malloc(MAXBUFFERSIZE)) == NULL) printf("failed 2\n");
+                    char prev;
+                    unsigned int size = 0;
+                    unsigned int getsize = 0;
+                    unsigned int length;
+                    unsigned int new_length = 0;
+                    unsigned int readline;
+                    while(1)
+                    {
+                        if((size = read(new_fd, lengthBuffer+getsize, 4-getsize)) != -1)
+                        {
+                            if(size + getsize == 4){
+                                length = ntohl(*(unsigned int *)(lengthBuffer));
+                                break;
+                            }
+                        }
+                    }
+                    printf("size = %d\n", length);
+                    size = 0;
+                    while(1)
+                    {
+                        if((readline = read(new_fd, buf2 + size, length - size)) != -1)
+                        {
+                            printf("readline = %d, size = %d\n", readline, size);
+                            for(i = size; i < size + readline; i++)
+                            {
+                                //if(i%100000 == 0) printf("%d\n", i);
+                                if(init == 1)
+                                {
+                                    *(buf3 + new_length) = *(buf2 + i);
+                                    prev = *(buf2 + i);
+                                    new_length++;
+                                    init = 0;
+                                }
+                                else
+                                {
+                                    if(*(buf2 + i) != prev)
+                                    {
+                                        *(buf3 + new_length) = *(buf2 + i);
+                                        prev = *(buf2 + i);
+                                        new_length++;
+                                    }
+                                }
+                            }
+                            if(readline + size == length)
+                            {
+                                void *p;
+                                p = buf;
+                                *(int*)p = htonl(new_length);
+                                printf("new size = %d\n", new_length);
+                                if(write(new_fd, buf, 4) == -1) perror("send");
+                                if(write(new_fd, buf3, new_length) == -1) perror("send");
+                                break;
+                            }
+                            size += readline;
+                        }
+                    }
+                    printf("break!\n");
+                    free(buf2);
+                    free(buf3);
                 }
             //}
             close(new_fd);
