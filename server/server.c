@@ -166,7 +166,6 @@ int main(int argc, char *argv[])
                 while(1)
                 {
                     if(read(new_fd, buf, MAXDATASIZE-1) != -1)
-                    //if(read(new_fd, buffer, 8) != -1)
                     {
                         for (i = 0; i < 8; i++)
                         {
@@ -198,8 +197,53 @@ int main(int argc, char *argv[])
                         buffer[0] = htonl((opproto << 16) + checksum);
                         buffer[1] = htonl(trans_id);
                         if (write(new_fd, buffer, 8) == -1) perror("send");
-                        close(new_fd);
-                        exit(0);
+                        break;
+                    }
+                }
+                if(proto == 1)
+                {
+                    char prev;
+                    while(1)
+                    {
+                        if(read(new_fd, buf, MAXDATASIZE-1) != -1)
+                        {
+                            int j = 0;
+                            bool flag = true;
+                            //TODO: check invalid datas
+                            //      (ex. op != 0, proto != 0 | 1 | 2, checksum failed)
+                            printf("get string %d\n", j++);
+                            while(flag){
+                                if (buf[j] == prev)
+                                {
+                                    if(prev == '\\')
+                                    {
+                                        if(buf[j+1] == '0');
+                                        {
+                                            //just pass
+                                        }
+                                        else
+                                        {
+                                            //remove
+                                        }
+                                    }
+                                    else
+                                    {
+                                        //remove
+                                    }
+                                }
+                                else
+                                {
+                                    if(buf[j]=='0')
+                                    {
+                                        if(j != 0 && buf[j-1] == '\\')
+                                        {
+                                            //finish
+                                        }
+                                    }
+                                    //change prev
+                                }
+                            }
+                        }
                     }
                 }
             //}
