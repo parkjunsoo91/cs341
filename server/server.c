@@ -143,39 +143,25 @@ int main(int argc, char *argv[])
             perror("accept");
             continue;
         }
-        /*
-        inet_ntop(their_addr.ss_family,
-            get_in_addr((struct sockaddr *)&their_addr),
-            s, sizeof s);
-        printf("server: got connection from %s\n", s);
-
-        if (!fork()) { // this is the child process
-            close(sockfd); // child doesn't need the listener
-            if (send(new_fd, "Hello, world!", 13, 0) == -1)
-                perror("send");
-            close(new_fd);
-            exit(0);
-        }
-        close(new_fd);  // parent doesn't need this
-        */
         else 
         {
             inet_ntop(their_addr.ss_family,
                 get_in_addr((struct sockaddr *)&their_addr),
                 s, sizeof s);
             printf("server: got connection from %s\n", s);
-            //if (!fork()) { // this is the child process
+            int pid = fork();
+            if(pid < 0)
+            {
+                perror("fork failed");
+                exit(1);
+            }
+            else if(pid == 0)
+            {
+                close(sockfd);
                 while(1)
                 {
                     if(read(new_fd, buf, MAXDATASIZE-1) != -1)
                     {
-                        for (i = 0; i < 8; i++)
-                        {
-                            printf("%hu,", *(buf+i));
-                        }
-                        //TODO: check invalid datas
-                        //      (ex. op != 0, proto != 0 | 1 | 2, checksum failed)
-                        printf("\n");
                         proto = (unsigned char)(*(buf+1));
                         printf("proto = %d\n", proto);
                         checksum = ntohs(*(unsigned short *)(buf+2));
@@ -185,9 +171,30 @@ int main(int argc, char *argv[])
                             ntohs(*(unsigned short *)(buf+2))+
                             ntohs(*(unsigned short *)(buf+4))+
                             ntohs(*(unsigned short *)(buf+6)) == (unsigned short)-1) printf("checksum passed\n");
-                        else printf("checksum failed\n");
+                        else
+                        {
+                            printf("checksum failed\n");
+                            close(new_fd);
+                            exit(0);
+                        }
                         printf("trans_id = %d\n", trans_id);
-                        if(proto == 0) proto = 1; //It is for tests, change it randomly later.
+                        if(proto == 0)
+                        {
+                            srand(time(NULL));
+                            proto = rand() % 2 + 1;
+                        }
+                        else if(proto != 1 && proto != 2)
+                        {
+                            printf("proto must be (0|1|2)\n");
+                            close(new_fd);
+                            exit(0);
+                        }
+                        if((unsigned char)(*buf) != 0)
+                        {
+                            printf("op must be 0\n");
+                            close(new_fd);
+                            exit(0);
+                        }
                         opproto = (op << 8) + proto;
                         id1 = (trans_id >> 16) & 0xffff;
                         id2 = trans_id & 0xffff;
@@ -207,7 +214,7 @@ int main(int argc, char *argv[])
                 {
                     int init = 1;
                     char buf2[MAXDATASIZE];
-                    char prev;
+                    int prev;
                     while(1)
                     {
                         if(read(new_fd, buf, 1) != -1)
@@ -238,8 +245,9 @@ int main(int argc, char *argv[])
                                     }
                                     else
                                     {
-                                        break;
-
+                                        printf("odd number of \'\\\'\n");
+                                        close(new_fd);
+                                        exit(0);
                                     }
                                 }
                                 else
@@ -258,13 +266,11 @@ int main(int argc, char *argv[])
                 {
                     int init = 1;
                     char lengthBuffer[4];
-                    //char *buf2 = (char *)malloc(MAXBUFFERSIZE);
-                    //char *buf3 = (char *)malloc(MAXBUFFERSIZE);
                     char *buf2;
                     char *buf3;
                     if((buf2 = (char *)malloc(MAXBUFFERSIZE)) == NULL) printf("failed 1\n");
                     if((buf3 = (char *)malloc(MAXBUFFERSIZE)) == NULL) printf("failed 2\n");
-                    char prev;
+                    int prev;
                     unsigned int size = 0;
                     unsigned int getsize = 0;
                     unsigned int length;
@@ -289,7 +295,6 @@ int main(int argc, char *argv[])
                             printf("readline = %d, size = %d\n", readline, size);
                             for(i = size; i < size + readline; i++)
                             {
-                                //if(i%100000 == 0) printf("%d\n", i);
                                 if(init == 1)
                                 {
                                     *(buf3 + new_length) = *(buf2 + i);
@@ -320,14 +325,20 @@ int main(int argc, char *argv[])
                             size += readline;
                         }
                     }
-                    printf("break!\n");
+                    //printf("break!\n");
                     free(buf2);
                     free(buf3);
                 }
-            //}
-            close(new_fd);
+                close(new_fd);
+                exit(0);
+            }
+            else
+            {
+                close(new_fd);
+            }
         }
     }
+    close(sockfd);
 
     return 0;
 }
