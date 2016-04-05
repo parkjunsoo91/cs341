@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    printf("server: waiting for connections...\n");
+    fprintf(stderr, "server: waiting for connections...\n");
 
     unsigned char op = 1;
     unsigned char proto;
@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
             inet_ntop(their_addr.ss_family,
                 get_in_addr((struct sockaddr *)&their_addr),
                 s, sizeof s);
-            printf("server: got connection from %s\n", s);
+            fprintf(stderr, "server: got connection from %s\n", s);
             int pid = fork();
             if(pid < 0)
             {
@@ -172,21 +172,21 @@ int main(int argc, char *argv[])
                     //if(read(new_fd, buf, MAXDATASIZE-1) != -1)
                     //{
                         proto = (unsigned char)(*(buf+1));
-                        printf("proto = %d\n", proto);
+                        fprintf(stderr, "proto = %d\n", proto);
                         checksum = ntohs(*(unsigned short *)(buf+2));
-                        printf("checksum = %d\n",checksum);
+                        fprintf(stderr, "checksum = %d\n",checksum);
                         trans_id = ntohl(*(unsigned int *)(buf+4));
                         if(ntohs(*(unsigned short *)(buf))+
                             ntohs(*(unsigned short *)(buf+2))+
                             ntohs(*(unsigned short *)(buf+4))+
-                            ntohs(*(unsigned short *)(buf+6)) == (unsigned short)-1) printf("checksum passed\n");
+                            ntohs(*(unsigned short *)(buf+6)) == (unsigned short)-1) fprintf(stderr, "checksum passed\n");
                         else
                         {
-                            printf("checksum failed\n");
+                            fprintf(stderr, "checksum failed\n");
                             close(new_fd);
                             exit(0);
                         }
-                        printf("trans_id = %d\n", trans_id);
+                        fprintf(stderr, "trans_id = %d\n", trans_id);
                         if(proto == 0)
                         {
                             srand(time(NULL));
@@ -194,13 +194,13 @@ int main(int argc, char *argv[])
                         }
                         else if(proto != 1 && proto != 2)
                         {
-                            printf("proto must be (0|1|2)\n");
+                            fprintf(stderr, "proto must be (0|1|2)\n");
                             close(new_fd);
                             exit(0);
                         }
                         if((unsigned char)(*buf) != 0)
                         {
-                            printf("op must be 0\n");
+                            fprintf(stderr, "op must be 0\n");
                             close(new_fd);
                             exit(0);
                         }
@@ -254,7 +254,7 @@ int main(int argc, char *argv[])
                                     }
                                     else
                                     {
-                                        printf("odd number of \'\\\'\n");
+                                        fprintf(stderr, "odd number of \'\\\'\n");
                                         close(new_fd);
                                         exit(0);
                                     }
@@ -277,8 +277,8 @@ int main(int argc, char *argv[])
                     char lengthBuffer[4];
                     char *buf2;
                     char *buf3;
-                    if((buf2 = (char *)malloc(MAXBUFFERSIZE)) == NULL) printf("failed 1\n");
-                    if((buf3 = (char *)malloc(MAXBUFFERSIZE)) == NULL) printf("failed 2\n");
+                    if((buf2 = (char *)malloc(MAXBUFFERSIZE)) == NULL) fprintf(stderr, "failed 1\n");
+                    if((buf3 = (char *)malloc(MAXBUFFERSIZE)) == NULL) fprintf(stderr, "failed 2\n");
                     int prev;
                     unsigned int size = 0;
                     unsigned int getsize = 0;
@@ -295,13 +295,12 @@ int main(int argc, char *argv[])
                             }
                         }
                     }
-                    printf("size = %d\n", length);
+                    fprintf(stderr, "size = %d\n", length);
                     size = 0;
                     while(1)
                     {
                         if((readline = read(new_fd, buf2 + size, length - size)) != -1)
                         {
-                            printf("readline = %d, size = %d\n", readline, size);
                             for(i = size; i < size + readline; i++)
                             {
                                 if(init == 1)
@@ -326,7 +325,6 @@ int main(int argc, char *argv[])
                                 void *p;
                                 p = buf;
                                 *(int*)p = htonl(new_length);
-                                printf("new size = %d\n", new_length);
                                 if(write(new_fd, buf, 4) == -1) perror("send");
                                 if(write(new_fd, buf3, new_length) == -1) perror("send");
                                 break;
