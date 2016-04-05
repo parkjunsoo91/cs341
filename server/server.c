@@ -250,7 +250,7 @@ int main(int argc, char *argv[])
                                     else if(buf[1]=='0')
                                     {
                                         if(write(new_fd, buf, 2) == -1) perror("send");
-                                        break;
+                                        continue;
                                     }
                                     else
                                     {
@@ -280,59 +280,65 @@ int main(int argc, char *argv[])
                     if((buf2 = (char *)malloc(MAXBUFFERSIZE)) == NULL) fprintf(stderr, "failed 1\n");
                     if((buf3 = (char *)malloc(MAXBUFFERSIZE)) == NULL) fprintf(stderr, "failed 2\n");
                     int prev;
-                    unsigned int size = 0;
-                    unsigned int getsize = 0;
+                    unsigned int size;
+                    unsigned int getsize;
                     unsigned int length;
-                    unsigned int new_length = 0;
+                    unsigned int new_length;
                     unsigned int readline;
                     while(1)
                     {
-                        if((size = read(new_fd, lengthBuffer+getsize, 4-getsize)) != -1)
+                        size = 0;
+                        getsize = 0;
+                        new_length = 0;
+                        while(1)
                         {
-                            if(size + getsize == 4){
-                                length = ntohl(*(unsigned int *)(lengthBuffer));
-                                break;
+                            if((size = read(new_fd, lengthBuffer+getsize, 4-getsize)) != -1)
+                            {
+                                if(size + getsize == 4){
+                                    length = ntohl(*(unsigned int *)(lengthBuffer));
+                                    break;
+                                }
                             }
                         }
-                    }
-                    fprintf(stderr, "size = %d\n", length);
-                    size = 0;
-                    while(1)
-                    {
-                        if((readline = read(new_fd, buf2 + size, length - size)) != -1)
+                        fprintf(stderr, "size = %d\n", length);
+                        size = 0;
+                        while(1)
                         {
-                            for(i = size; i < size + readline; i++)
+                            if((readline = read(new_fd, buf2 + size, length - size)) != -1)
                             {
-                                if(init == 1)
+                                for(i = size; i < size + readline; i++)
                                 {
-                                    *(buf3 + new_length) = *(buf2 + i);
-                                    prev = *(buf2 + i);
-                                    new_length++;
-                                    init = 0;
-                                }
-                                else
-                                {
-                                    if(*(buf2 + i) != prev)
+                                    if(init == 1)
                                     {
                                         *(buf3 + new_length) = *(buf2 + i);
                                         prev = *(buf2 + i);
                                         new_length++;
+                                        init = 0;
+                                    }
+                                    else
+                                    {
+                                        if(*(buf2 + i) != prev)
+                                        {
+                                            *(buf3 + new_length) = *(buf2 + i);
+                                            prev = *(buf2 + i);
+                                            new_length++;
+                                        }
                                     }
                                 }
+                                if(readline + size == length)
+                                {
+                                    void *p;
+                                    p = buf;
+                                    *(int*)p = htonl(new_length);
+                                    if(write(new_fd, buf, 4) == -1) perror("send");
+                                    if(write(new_fd, buf3, new_length) == -1) perror("send");
+                                    break;
+                                }
+                                size += readline;
                             }
-                            if(readline + size == length)
-                            {
-                                void *p;
-                                p = buf;
-                                *(int*)p = htonl(new_length);
-                                if(write(new_fd, buf, 4) == -1) perror("send");
-                                if(write(new_fd, buf3, new_length) == -1) perror("send");
-                                break;
-                            }
-                            size += readline;
                         }
-                    }
                     //printf("break!\n");
+                    }
                     free(buf2);
                     free(buf3);
                 }
