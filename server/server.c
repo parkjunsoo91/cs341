@@ -160,8 +160,17 @@ int main(int argc, char *argv[])
                 close(sockfd);
                 while(1)
                 {
-                    if(read(new_fd, buf, MAXDATASIZE-1) != -1)
+                    unsigned int size = 0;
+                    unsigned int getsize = 0;
+                    while(1)
                     {
+                        if((size = read(new_fd, buf+getsize, 8-getsize)) != -1)
+                        {
+                            if(size + getsize == 8) break;
+                        }
+                    }
+                    //if(read(new_fd, buf, MAXDATASIZE-1) != -1)
+                    //{
                         proto = (unsigned char)(*(buf+1));
                         printf("proto = %d\n", proto);
                         checksum = ntohs(*(unsigned short *)(buf+2));
@@ -207,7 +216,7 @@ int main(int argc, char *argv[])
                         buffer[1] = htonl(trans_id);
                         if (write(new_fd, buffer, 8) == -1) perror("send");
                         break;
-                    }
+                    //}
                 }
 
                 if(proto == 1)
